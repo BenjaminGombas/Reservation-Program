@@ -2,12 +2,16 @@ package render
 
 import (
 	"bytes"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"path/filepath"
 	"reservation_program/pkg/config"
+	"reservation_program/pkg/models"
 )
+
+var functions = template.FuncMap{}
 
 var app *config.AppConfig
 
@@ -16,18 +20,22 @@ func NewTemplates(a *config.AppConfig) {
 	app = a
 }
 
-// RenderTemplate renders templates using html/template
-func RenderTemplate(w http.ResponseWriter, tmpl string) {
+func AddDefaultData(td *models.TemplateData) *models.TemplateData {
 
+	return td
+}
+
+// RenderTemplate renders a template
+func RenderTemplate(w http.ResponseWriter, tmpl string, td *models.TemplateData) {
 	var tc map[string]*template.Template
+
 	if app.UseCache {
-		// Create a template cache from the app config
+		// get the template cache from the app config
 		tc = app.TemplateCache
 	} else {
 		tc, _ = CreateTemplateCache()
 	}
 
-	// Get the requested template
 	t, ok := tc[tmpl]
 	if !ok {
 		log.Fatal("Could not get template from template cache")
@@ -35,19 +43,19 @@ func RenderTemplate(w http.ResponseWriter, tmpl string) {
 
 	buf := new(bytes.Buffer)
 
+	td = AddDefaultData(td)
+
 	// Check for error in the value stored in the map
-	err := t.Execute(buf, nil)
+	_ = t.Execute(buf, td)
+
+	_, err := buf.WriteTo(w)
 	if err != nil {
-		log.Println(err)
+		fmt.Println("error writing template to browser", err)
 	}
 
-	// Render the template
-	_, err = buf.WriteTo(w)
-	if err != nil {
-		log.Println(err)
-	}
 }
 
+// CreateTemplateCache creates a template cache as a map
 func CreateTemplateCache() (map[string]*template.Template, error) {
 	myCache := map[string]*template.Template{}
 
@@ -62,7 +70,7 @@ func CreateTemplateCache() (map[string]*template.Template, error) {
 		// Get the name of the file
 		name := filepath.Base(page)
 		// Create a pointer to template, name the template, and parse the file page
-		ts, err := template.New(name).ParseFiles(page)
+		ts, err := template.New(name).Funcs(functions).ParseFiles(page)
 		if err != nil {
 			return myCache, err
 		}
